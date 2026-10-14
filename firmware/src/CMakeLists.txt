@@ -3,6 +3,7 @@ idf_component_register(
         "main.cpp"
         "ui.cpp"
         "wifi_scan.cpp"
+        "ble_scan.cpp"
         "splash_logo.cpp"
         "board_adapter.cpp"
         "settings.cpp"
@@ -20,6 +21,7 @@ idf_component_register(
         esp_wifi
         esp_event
         esp_netif
+        bt
         nvs_flash
         lvgl
         espressif__esp_lcd_st7796

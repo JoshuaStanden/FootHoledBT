@@ -1,7 +1,7 @@
 # UI navigation
 
 ## Primary dashboard (exactly three)
-- **Recon**: Wi-Fi, Bluetooth/BLE, GNSS, NFC/RFID, infrared receive, radio interfaces. Tools show honest unavailable states until implemented.
+- **Recon**: Wi-Fi, Bluetooth/BLE, GNSS, NFC/RFID, infrared receive, radio interfaces. Wi-Fi (access-point scan) and Bluetooth/BLE (device scan) are live, refreshing on-screen roughly every half-second from a background radio scan; the remaining tools show honest unavailable states until implemented.
 - **Analyze**: observations, captured sessions, comparisons, saved logs, statistics, analysis tools. Empty states until data exists.
 - **Expand**: module discovery, uninitialized modules, installed modules, manual module registration, setup wizard, module diagnostics. Auto-discovery is bus dependent; the prototype only simulates it.
 
