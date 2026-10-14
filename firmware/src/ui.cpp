@@ -13,6 +13,7 @@
 #include "splash_logo.h"
 #include "settings.h"
 #include "wifi_scan.h"
+#include "ble_scan.h"
 #include "lvgl.h"
 #include <stdio.h>
 #include <string.h>
@@ -77,6 +78,11 @@ lv_obj_t* wifi_status = nullptr;
 lv_timer_t* wifi_timer = nullptr;
 uint32_t wifi_last_generation = UINT32_MAX;
 
+lv_obj_t* ble_list = nullptr;
+lv_obj_t* ble_status = nullptr;
+lv_timer_t* ble_timer = nullptr;
+uint32_t ble_last_generation = UINT32_MAX;
+
 void mask_identifier(char *s) {
     if (!footholed_settings_get_privacy_on()) return;
     size_t len = strlen(s);
@@ -129,6 +135,49 @@ void wifi_refresh(lv_timer_t*) {
     }
 }
 void on_wifi(lv_event_t*) { navigate("WiFi"); }
+
+const char* ble_addr_kind(uint8_t t) {
+    // NimBLE own/peer address types: 0 public, 1 random, 2/3 resolvable (RPA).
+    switch (t) {
+        case 0: return "public";
+        case 1: return "random";
+        case 2: return "rpa-pub";
+        case 3: return "rpa-rnd";
+        default: return "addr";
+    }
+}
+void ble_refresh(lv_timer_t*) {
+    if (!ble_list || !ble_status) return;
+    FootHoledBLEDevice devs[48];
+    uint32_t gen=0;
+    bool running=false, error=false;
+    size_t n=footholed_ble_snapshot(devs,48,&gen,&running,&error);
+    if (gen == ble_last_generation && !error) return;
+    ble_last_generation=gen;
+    if (error) lv_label_set_text(ble_status,"BLE scan failed; retrying...");
+    else if (!n) lv_label_set_text(ble_status,"Scanning for BLE devices...");
+    else lv_label_set_text_fmt(ble_status,"%u devices found / refreshing",(unsigned)n);
+    lv_obj_clean(ble_list);
+    for (size_t i=0;i<n;++i) {
+        char name[33];
+        strncpy(name, devs[i].name, sizeof(name)); name[32]=0;
+        if (!name[0]) strcpy(name,"<no name>");
+        char mac[18];
+        snprintf(mac,sizeof(mac),"%02X:%02X:%02X:%02X:%02X:%02X",
+                 devs[i].addr[0],devs[i].addr[1],devs[i].addr[2],
+                 devs[i].addr[3],devs[i].addr[4],devs[i].addr[5]);
+        mask_identifier(name); mask_identifier(mac);
+        char line[180];
+        snprintf(line,sizeof(line),"%s\n%s  |  %d dBm  |  %s",
+                 name,mac,(int)devs[i].rssi,ble_addr_kind(devs[i].addr_type));
+        lv_obj_t* entry=lv_label_create(ble_list);
+        lv_label_set_text(entry,line);
+        lv_obj_set_width(entry,lv_pct(100));
+        lv_label_set_long_mode(entry,LV_LABEL_LONG_WRAP);
+        lv_obj_set_style_pad_bottom(entry,8,0);
+    }
+}
+void on_bluetooth(lv_event_t*) { navigate("Bluetooth"); }
 
 char current_section[32] = "Home";
 
@@ -189,6 +238,13 @@ void navigate(const char* section) {
         wifi_status = nullptr;
         footholed_wifi_stop();
     }
+    if (ble_timer) {
+        lv_timer_del(ble_timer);
+        ble_timer = nullptr;
+        ble_list = nullptr;
+        ble_status = nullptr;
+        footholed_ble_stop();
+    }
     lv_obj_clean(screen);
     lv_obj_set_style_pad_all(screen, 12, 0);
     lv_obj_t* title = lv_label_create(screen);
@@ -216,7 +272,8 @@ void navigate(const char* section) {
     } else if (!strcmp(section,"Recon")) {
         label(content,"Discover and collect");
         button(content,"Wi-Fi",on_wifi,nullptr);
-        for(const char* name : {"Bluetooth / BLE","GNSS","NFC / RFID","Infrared","Radio tools"}) button(content,name,on_stub,(void*)name);
+        button(content,"Bluetooth / BLE",on_bluetooth,nullptr);
+        for(const char* name : {"GNSS","NFC / RFID","Infrared","Radio tools"}) button(content,name,on_stub,(void*)name);
     } else if (!strcmp(section,"WiFi")) {
         label(content,"Nearby Wi-Fi access points");
         wifi_status=lv_label_create(content);
@@ -231,6 +288,20 @@ void navigate(const char* section) {
         footholed_wifi_start();
         wifi_timer=lv_timer_create(wifi_refresh,500,nullptr);
         wifi_refresh(nullptr);
+    } else if (!strcmp(section,"Bluetooth")) {
+        label(content,"Nearby Bluetooth LE devices");
+        ble_status=lv_label_create(content);
+        lv_label_set_text(ble_status,"Scanning for BLE devices...");
+        ble_list=lv_obj_create(content);
+        lv_obj_set_width(ble_list,lv_pct(100));
+        lv_obj_set_flex_grow(ble_list,1);
+        lv_obj_set_flex_flow(ble_list,LV_FLEX_FLOW_COLUMN);
+        lv_obj_add_style(ble_list,&panel_style,LV_PART_MAIN);
+        lv_obj_set_scroll_dir(ble_list,LV_DIR_VER);
+        ble_last_generation=UINT32_MAX;
+        footholed_ble_start();
+        ble_timer=lv_timer_create(ble_refresh,500,nullptr);
+        ble_refresh(nullptr);
     } else if (!strcmp(section,"Analyze")) {
         label(content,"No real observations recorded yet.");
         for(const char* name : {"Observations","Sessions","Compare","Statistics","Saved logs"}) button(content,name,on_stub,(void*)name);
