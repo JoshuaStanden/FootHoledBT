@@ -7,14 +7,14 @@
  * deliberately shaped the same so ui.cpp can treat Wi-Fi and BLE identically.
  *
  * Radio: uses the NimBLE host (CONFIG_BT_NIMBLE_ENABLED). Scanning is PASSIVE
- * (listen only, no scan requests, no connections) — appropriate for recon and
+ * (listen only, no scan requests, no connections) ΓÇö appropriate for recon and
  * low-impact on the shared 2.4 GHz radio it co-exists with Wi-Fi on.
  *
  * Refresh timing (matches the Wi-Fi scanner's two-tier model):
  *   - the UI re-reads the cached snapshot every ~500 ms (see ui.cpp),
  *   - the radio runs a fresh ~3 s discovery window each worker cycle.
- * A 1–2 s radio window was considered and rejected: BLE advertisers broadcast
- * on an interval (often 1–2 s apart), so too short a window misses devices and
+ * A 1ΓÇô2 s radio window was considered and rejected: BLE advertisers broadcast
+ * on an interval (often 1ΓÇô2 s apart), so too short a window misses devices and
  * the list flickers. ~3 s reliably catches active advertisers while keeping the
  * on-screen list feeling live.
  *
@@ -26,6 +26,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
+#include "recon_log.h"
 #include <string.h>
 
 #include "nimble/nimble_port.h"
@@ -123,7 +124,7 @@ int gap_event(struct ble_gap_event *event, void *arg) {
 
 void start_discovery() {
     struct ble_gap_disc_params p = {};
-    p.passive = 1;               // listen only — no scan requests, recon-friendly
+    p.passive = 1;               // listen only ΓÇö no scan requests, recon-friendly
     p.filter_duplicates = 0;     // we de-dup ourselves and want fresh RSSI
     p.itvl = 0;                  // controller default scan interval
     p.window = 0;                // controller default scan window
@@ -163,12 +164,19 @@ void scan_task(void *) {
 
         // Publish the window's result to the snapshot table.
         xSemaphoreTake(guard, portMAX_DELAY);
+        size_t logged = 0;
         if (requested) {
             dev_count = working_count;
             memcpy(devices, working, working_count * sizeof(FootHoledBLEDevice));
             ++generation;
+            logged = dev_count;
         }
         xSemaphoreGive(guard);
+        // Persist every device seen in this window to the SD-card log, after
+        // releasing the guard so SD I/O never blocks a UI snapshot read.
+        if (logged > 0) {
+            footholed_recon_log_ble(devices, logged);
+        }
 
         vTaskDelay(pdMS_TO_TICKS(250)); // brief gap, matches Wi-Fi cadence feel
     }
