@@ -15,6 +15,7 @@
 #include "wifi_scan.h"
 #include "ble_scan.h"
 #include "diagnostics.h"
+#include "sd_format.h"
 #include "lvgl.h"
 #include <stdio.h>
 #include <string.h>
@@ -179,6 +180,100 @@ void ble_refresh(lv_timer_t*) {
     }
 }
 void on_bluetooth(lv_event_t*) { navigate("Bluetooth"); }
+
+// --------------------------------------------------------------------------
+// Destructive SD-card format flow.
+//
+// Two-stage confirmation gate before anything irreversible happens:
+//   Storage screen "Format SD Card" (red)  ->  warning msgbox #1
+//     "No"  -> close, return to Settings (nothing happens)
+//     "Yes" -> warning msgbox #2 ("are you sure you're sure?")
+//        "No"  -> close, return to Settings (nothing happens)
+//        "Yes" -> footholed_sd_format() runs; result shown on a report screen.
+//
+// The safe choice is emphasised: the destructive "Yes" is red, the "No"/Cancel
+// is the plain default. Both messages state the wipe is destructive & permanent.
+// --------------------------------------------------------------------------
+constexpr uint32_t DANGER     = 0xDC2626; // red for destructive affordances
+constexpr uint32_t DANGER_TXT = 0xFCA5A5; // light red for warning text
+
+void show_format_confirm_1(lv_event_t*);  // fwd decls
+void run_sd_format(lv_event_t*);
+
+// Style the "Yes, format" button of a msgbox red so it reads as destructive.
+static void make_danger(lv_obj_t* btn) {
+    if (!btn) return;
+    lv_obj_set_style_bg_color(btn, lv_color_hex(DANGER), LV_PART_MAIN);
+    lv_obj_set_style_text_color(btn, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+}
+
+// Both "No" paths just dismiss the dialog; the Storage screen is still behind
+// it, and the Settings button in the header returns to Settings. We also
+// re-navigate to Settings explicitly so "No" lands exactly where asked.
+void on_format_cancel(lv_event_t* e) {
+    lv_obj_t* mbox = (lv_obj_t*)lv_event_get_user_data(e);
+    if (mbox) lv_msgbox_close(mbox);
+    navigate("Settings");
+}
+
+// Stage 2 dialog: the final "are you sure you're sure?" gate.
+void show_format_confirm_2(lv_event_t* e) {
+    lv_obj_t* prev = (lv_obj_t*)lv_event_get_user_data(e);
+    if (prev) lv_msgbox_close(prev);
+
+    lv_obj_t* mbox = lv_msgbox_create(nullptr);
+    lv_msgbox_add_title(mbox, "Are you sure you're sure?");
+    lv_msgbox_add_text(mbox,
+        "FINAL CONFIRMATION. This permanently ERASES everything on the SD "
+        "card. This cannot be undone. Format the card now?");
+    lv_obj_set_style_text_color(mbox, lv_color_hex(DANGER_TXT), LV_PART_MAIN);
+
+    lv_obj_t* yes = lv_msgbox_add_footer_button(mbox, "Yes, format now");
+    make_danger(yes);
+    lv_obj_add_event_cb(yes, run_sd_format, LV_EVENT_CLICKED, mbox);
+
+    lv_obj_t* no = lv_msgbox_add_footer_button(mbox, "No, cancel");
+    lv_obj_add_event_cb(no, on_format_cancel, LV_EVENT_CLICKED, mbox);
+}
+
+// Stage 1 dialog: the "last warning" gate.
+void show_format_confirm_1(lv_event_t*) {
+    lv_obj_t* mbox = lv_msgbox_create(nullptr);
+    lv_msgbox_add_title(mbox, "Last warning");
+    lv_msgbox_add_text(mbox,
+        "Are you sure? This is your LAST WARNING. You are about to "
+        "DESTRUCTIVELY format the card -- every file will be permanently "
+        "erased and cannot be recovered.");
+    lv_obj_set_style_text_color(mbox, lv_color_hex(DANGER_TXT), LV_PART_MAIN);
+
+    lv_obj_t* yes = lv_msgbox_add_footer_button(mbox, "Yes, continue");
+    make_danger(yes);
+    lv_obj_add_event_cb(yes, show_format_confirm_2, LV_EVENT_CLICKED, mbox);
+
+    lv_obj_t* no = lv_msgbox_add_footer_button(mbox, "No, go back");
+    lv_obj_add_event_cb(no, on_format_cancel, LV_EVENT_CLICKED, mbox);
+}
+
+// Executed only after BOTH confirmations. Runs the format and shows the result.
+void run_sd_format(lv_event_t* e) {
+    lv_obj_t* prev = (lv_obj_t*)lv_event_get_user_data(e);
+    if (prev) lv_msgbox_close(prev);
+
+    fh_sd_format_result_t r = footholed_sd_format();
+
+    // Report the outcome on a modal so the user sees success / no-card / fail.
+    lv_obj_t* mbox = lv_msgbox_create(nullptr);
+    lv_msgbox_add_title(mbox,
+        r == FH_SD_FORMAT_OK ? "Done" :
+        r == FH_SD_FORMAT_NO_CARD ? "No card" : "Format failed");
+    lv_msgbox_add_text(mbox, footholed_sd_format_result_text(r));
+    lv_obj_set_style_text_color(mbox,
+        lv_color_hex(r == FH_SD_FORMAT_OK ? 0x4ADE80 : 0xFBBF24), LV_PART_MAIN);
+    lv_obj_t* ok = lv_msgbox_add_footer_button(mbox, "OK");
+    lv_obj_add_event_cb(ok, on_format_cancel, LV_EVENT_CLICKED, mbox);
+}
+
+void on_storage(lv_event_t*) { navigate("Storage"); }
 
 void on_diagnostics(lv_event_t*) { navigate("Diagnostics"); }
 // Re-run just re-navigates to the same section, which re-runs the pass.
@@ -381,7 +476,33 @@ void navigate(const char* section) {
         lv_obj_t* preview=lv_label_create(content);
         lv_label_set_text(preview,"Preview: ****-demo-SSID");
         lv_obj_add_event_cb(slider,on_mask,LV_EVENT_VALUE_CHANGED,preview);
-        for(const char* name : {"Display","Storage","Device","Developer","About"}) button(content,name,on_stub,(void*)name);
+        button(content,"Storage",on_storage,nullptr);
+        for(const char* name : {"Display","Device","Developer","About"}) button(content,name,on_stub,(void*)name);
+    } else if (!strcmp(section,"Storage")) {
+        label(content,"Storage");
+        // Prominent, repeated warning that formatting is destructive & permanent.
+        lv_obj_t* w1=lv_label_create(content);
+        lv_label_set_text(w1,
+            "WARNING: formatting the SD card is DESTRUCTIVE and PERMANENT.");
+        lv_obj_set_width(w1,lv_pct(100));
+        lv_label_set_long_mode(w1,LV_LABEL_LONG_WRAP);
+        lv_obj_set_style_text_color(w1,lv_color_hex(DANGER_TXT),0);
+        lv_obj_t* w2=lv_label_create(content);
+        lv_label_set_text(w2,
+            "Every file on the card will be erased and cannot be recovered. "
+            "The recon log is wiped and recreated empty. You will be asked to "
+            "confirm twice.");
+        lv_obj_set_width(w2,lv_pct(100));
+        lv_label_set_long_mode(w2,LV_LABEL_LONG_WRAP);
+        lv_obj_set_style_text_color(w2,lv_color_hex(DANGER_TXT),0);
+        // Red destructive button -> opens the two-stage confirmation gate.
+        lv_obj_t* fmt=themed_button(content);
+        lv_obj_set_width(fmt,lv_pct(100));
+        lv_obj_set_style_bg_color(fmt,lv_color_hex(DANGER),LV_PART_MAIN);
+        lv_obj_set_style_text_color(fmt,lv_color_hex(0xFFFFFF),LV_PART_MAIN);
+        lv_obj_add_event_cb(fmt,show_format_confirm_1,LV_EVENT_CLICKED,nullptr);
+        lv_obj_t* fl=lv_label_create(fmt);
+        lv_label_set_text(fl,"Format SD Card"); lv_obj_center(fl);
     }
 }
 }

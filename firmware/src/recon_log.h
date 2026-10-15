@@ -64,3 +64,17 @@ void footholed_recon_log_wifi(const FootHoledAP *aps, size_t count);
 // Append one CSV row per entry for a completed BLE scan window (every sighting).
 // No-ops safely if the SD card is unavailable.
 void footholed_recon_log_ble(const FootHoledBLEDevice *devs, size_t count);
+
+// ---------------------------------------------------------------------------
+// DESTRUCTIVE: fully format the mounted microSD card, erasing EVERYTHING on it,
+// then recreate a fresh empty /sdcard/recon_log.csv (header row only).
+//
+// This is the backing operation for the "Format SD Card" UI action. It lives
+// here, not in sd_format.cpp, because this module owns the mounted card handle
+// and the log path. The UI MUST gate this behind explicit user confirmation;
+// this function performs NO confirmation of its own.
+//
+// Returns false if no card is mounted or the format fails. On success the
+// logger remains available and ready to append to the new empty log.
+// THIS CANNOT BE UNDONE.
+bool footholed_recon_log_format(void);
