@@ -476,3 +476,21 @@ void footholed_orient_poll(void)
                 (int)o, (int)rotation);
     }
 }
+
+
+// ===========================================================================
+// Accessors for other services (e.g. diagnostics) that need the shared bus or
+// the display-ready state owned by this translation unit. Read-only — they do
+// not create or tear down anything.
+// ===========================================================================
+i2c_master_bus_handle_t footholed_board_i2c_bus(void)
+{
+    return s_i2c_bus;
+}
+
+bool footholed_board_display_ready(void)
+{
+    // s_lvgl_disp is set only after the display + input devices are registered
+    // with LVGL in footholed_board_init(), so it is the authoritative flag.
+    return s_lvgl_disp != nullptr;
+}

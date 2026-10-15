@@ -14,6 +14,7 @@
 #include "settings.h"
 #include "wifi_scan.h"
 #include "ble_scan.h"
+#include "diagnostics.h"
 #include "lvgl.h"
 #include <stdio.h>
 #include <string.h>
@@ -179,6 +180,10 @@ void ble_refresh(lv_timer_t*) {
 }
 void on_bluetooth(lv_event_t*) { navigate("Bluetooth"); }
 
+void on_diagnostics(lv_event_t*) { navigate("Diagnostics"); }
+// Re-run just re-navigates to the same section, which re-runs the pass.
+void on_diag_rerun(lv_event_t*) { navigate("Diagnostics"); }
+
 char current_section[32] = "Home";
 
 void label(lv_obj_t* parent, const char* text, int font_size_unused = 0) {
@@ -307,7 +312,47 @@ void navigate(const char* section) {
         for(const char* name : {"Observations","Sessions","Compare","Statistics","Saved logs"}) button(content,name,on_stub,(void*)name);
     } else if (!strcmp(section,"Expand")) {
         label(content,"Module registry: discovery not connected.");
-        for(const char* name : {"Discover modules","Uninitialized","Installed modules","Manual setup","Diagnostics"}) button(content,name,on_stub,(void*)name);
+        for(const char* name : {"Discover modules","Uninitialized","Installed modules","Manual setup"}) button(content,name,on_stub,(void*)name);
+        button(content,"Diagnostics",on_diagnostics,nullptr);
+    } else if (!strcmp(section,"Diagnostics")) {
+        label(content,"Hardware self-test");
+        // Run the sanity pass now and render each result as a colour-coded row.
+        static fh_diag_result_t results[FH_DIAG_MAX_RESULTS];
+        size_t ok=0, fail=0;
+        size_t count=footholed_diagnostics_run(results,FH_DIAG_MAX_RESULTS,&ok,&fail);
+        lv_obj_t* summary=lv_label_create(content);
+        lv_label_set_text_fmt(summary,"%u checks  |  %u OK  |  %u FAIL",
+                              (unsigned)count,(unsigned)ok,(unsigned)fail);
+        lv_obj_set_style_text_color(summary,
+            lv_color_hex(fail ? 0xF87171 : 0x4ADE80), 0);
+        lv_obj_t* list=lv_obj_create(content);
+        lv_obj_set_width(list,lv_pct(100));
+        lv_obj_set_flex_grow(list,1);
+        lv_obj_set_flex_flow(list,LV_FLEX_FLOW_COLUMN);
+        lv_obj_add_style(list,&panel_style,LV_PART_MAIN);
+        lv_obj_set_scroll_dir(list,LV_DIR_VER);
+        for (size_t i=0;i<count;++i) {
+            // Colour per status: OK green, FAIL red, NOT PRESENT amber, SKIPPED grey.
+            uint32_t col;
+            switch (results[i].status) {
+                case FH_DIAG_OK:          col=0x4ADE80; break;
+                case FH_DIAG_FAIL:        col=0xF87171; break;
+                case FH_DIAG_NOT_PRESENT: col=0xFBBF24; break;
+                default:                  col=0x9CA3AF; break;
+            }
+            char line[96];
+            snprintf(line,sizeof(line),"%-16s %s  %s",
+                     results[i].name,
+                     footholed_diagnostics_status_text(results[i].status),
+                     results[i].detail);
+            lv_obj_t* entry=lv_label_create(list);
+            lv_label_set_text(entry,line);
+            lv_obj_set_width(entry,lv_pct(100));
+            lv_label_set_long_mode(entry,LV_LABEL_LONG_WRAP);
+            lv_obj_set_style_text_color(entry,lv_color_hex(col),0);
+            lv_obj_set_style_pad_bottom(entry,6,0);
+        }
+        button(content,"Re-run",on_diag_rerun,nullptr);
     } else if (!strcmp(section,"Settings")) {
         label(content,"Settings (NVS-persisted)");
         label(content,"Privacy masking enabled");

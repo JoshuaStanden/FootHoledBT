@@ -91,3 +91,12 @@ Mark each entry with status: **[PLANNED]**, **[IN PROGRESS]**, **[DONE ΓÇö SO
 - [ ] Recon log: with NO card inserted, recon still works (feature no-ops, one warning)
 - [ ] MCP23017 responds at I2C address (default 0x20)
 - [ ] INA228 responds at I2C address (default 0x40)
+- [ ] Diagnostics self-test: Expand -> Diagnostics opens and runs the pass on open
+- [ ] Diagnostics self-test: SoC + Memory rows show OK (cores / flash / PSRAM sane)
+- [ ] Diagnostics self-test: I2C bus row lists the ACKing addresses (expect 0x40/0x51/0x6A|0x6B at minimum)
+- [ ] Diagnostics self-test: IMU row OK (reuses the QMI8658 WHO_AM_I check)
+- [ ] Diagnostics self-test: RTC row OK (0x51 ACK) — confirms the clock for the timestamp TODO is present
+- [ ] Diagnostics self-test: Power (INA228) row OK and shows a plausible VBUS voltage
+- [ ] Diagnostics self-test: SD card row OK when a FAT32 card is inserted, NOT PRESENT when absent
+- [ ] Diagnostics self-test: Display + touch row OK; Wi-Fi and BLE rows OK (ready/idle)
+- [ ] Diagnostics self-test: Re-run button re-runs the pass and refreshes the results
