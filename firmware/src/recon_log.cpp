@@ -172,3 +172,44 @@ void footholed_recon_log_ble(const FootHoledBLEDevice *devs, size_t count) {
     }
     xSemaphoreGive(s_guard);
 }
+
+bool footholed_recon_log_format(void) {
+    // Caller (sd_format service / UI) is responsible for user confirmation.
+    // Here we just do the destructive work on the already-mounted card.
+    if (!s_available || !s_card) {
+        ESP_LOGW(TAG, "format requested but no card mounted");
+        return false;
+    }
+
+    xSemaphoreTake(s_guard, portMAX_DELAY);
+
+    // esp_vfs_fat_sdcard_format() reuses the existing mount: it erases the card
+    // and lays down a fresh FAT filesystem, leaving it mounted at MOUNT_POINT.
+    // Every file (including the old recon_log.csv) is permanently destroyed.
+    esp_err_t err = esp_vfs_fat_sdcard_format(MOUNT_POINT, s_card);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "esp_vfs_fat_sdcard_format failed: %s", esp_err_to_name(err));
+        // Card state is undefined after a failed format; mark unavailable so
+        // callers do not assume a usable log, and let a reboot re-mount cleanly.
+        s_available = false;
+        xSemaphoreGive(s_guard);
+        return false;
+    }
+
+    // Recreate a fresh, empty log file with just the header row so recon
+    // logging continues to work immediately after the wipe.
+    FILE *f = fopen(LOG_PATH, "w");
+    if (!f) {
+        ESP_LOGE(TAG, "format OK but cannot recreate %s", LOG_PATH);
+        s_available = false;
+        xSemaphoreGive(s_guard);
+        return false;
+    }
+    fputs(CSV_HEADER, f);
+    fclose(f);
+
+    s_available = true;
+    ESP_LOGI(TAG, "SD card formatted; fresh empty log at %s", LOG_PATH);
+    xSemaphoreGive(s_guard);
+    return true;
+}

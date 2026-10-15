@@ -11,6 +11,7 @@ idf_component_register(
         "ina228.cpp"
         "qmi8658.cpp"
         "recon_log.cpp"
+        "sd_format.cpp"
         "diagnostics.cpp"
     INCLUDE_DIRS "."
     REQUIRES
