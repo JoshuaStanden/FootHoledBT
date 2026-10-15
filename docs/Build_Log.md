@@ -1,23 +1,23 @@
 # Build Log
 
 Chronological record of build attempts, hardware observations, and verified milestones.
-Mark each entry with status: **[PLANNED]**, **[IN PROGRESS]**, **[DONE — SOFTWARE ONLY]**, **[DONE — HW VERIFIED]**, or **[BLOCKED]**.
+Mark each entry with status: **[PLANNED]**, **[IN PROGRESS]**, **[DONE ΓÇö SOFTWARE ONLY]**, **[DONE ΓÇö HW VERIFIED]**, or **[BLOCKED]**.
 
 ---
 
-## 2026-10-11 — Board bringup session  `[DONE — SOFTWARE ONLY]`
+## 2026-10-11 ΓÇö Board bringup session  `[DONE ΓÇö SOFTWARE ONLY]`
 
 **What was done (no physical hardware used):**
 
 | File | Change |
 |---|---|
 | `firmware/src/board_adapter.cpp` | Full ST7796 SPI display + FT6336 touch init via TCA9554 reset, LVGL 9 registration, LEDC backlight (non-B board) |
-| `firmware/src/settings.h/.cpp` | NVS settings service — brightness, privacy, mask length |
+| `firmware/src/settings.h/.cpp` | NVS settings service ΓÇö brightness, privacy, mask length |
 | `firmware/src/main.cpp` | Wired settings init + brightness apply into startup sequence |
 | `firmware/src/ui.cpp` | Settings screen reads/writes via settings service (no more RAM-only state) |
 | `firmware/src/idf_component.yml` | Added `espressif/esp_lcd_st7796` dependency (non-B board) |
 | `firmware/src/CMakeLists.txt` | Added `settings.cpp` to build sources |
-| `firmware/platformio.ini` | Board target → `esp32-s3-devkitc-1-n16r8v`; SPIRAM + flash flags |
+| `firmware/platformio.ini` | Board target ΓåÆ `esp32-s3-devkitc-1-n16r8v`; SPIRAM + flash flags |
 | `firmware/sdkconfig.defaults` | PSRAM octal, SPI DMA, stack size |
 | `firmware/partitions.csv` | 16 MB layout: NVS + factory 6M + OTA 6M + SPIFFS + NVS keys |
 | `docs/H0.1_Pin_Map.md` | Complete verified GPIO table from Waveshare BSP |
@@ -43,18 +43,18 @@ Mark each entry with status: **[PLANNED]**, **[IN PROGRESS]**, **[DONE — SOFTW
 
 3. **First flash:** `pio run -t upload` (USB-C, ensure the correct COM port is selected).
 
-4. **Serial monitor:** `pio device monitor` — look for:
-   - `FootHoled/settings: Settings loaded — brightness=75%...`
-   - `FootHoled/board: Board init complete — display 320x480, touch registered`
+4. **Serial monitor:** `pio device monitor` ΓÇö look for:
+   - `FootHoled/settings: Settings loaded ΓÇö brightness=75%...`
+   - `FootHoled/board: Board init complete ΓÇö display 320x480, touch registered`
    - Any `ESP_LOGE` lines indicate a driver failure.
 
 5. **Display check:** Screen should light up and show the FootHoled home screen (Recon / Analyze / Expand buttons).
 
-6. **Touch check:** Tap a button — serial output should show the touch callback firing. Calibrate X/Y axis swap/mirror if coordinates are rotated.
+6. **Touch check:** Tap a button ΓÇö serial output should show the touch callback firing. Calibrate X/Y axis swap/mirror if coordinates are rotated.
 
 7. **Settings persistence check:** Change brightness in Settings, reboot, confirm it restores.
 
-8. **Mark this entry `[DONE — HW VERIFIED]` and record observed behaviour.**
+8. **Mark this entry `[DONE ΓÇö HW VERIFIED]` and record observed behaviour.**
 
 ---
 
@@ -66,7 +66,7 @@ Mark each entry with status: **[PLANNED]**, **[IN PROGRESS]**, **[DONE — SOFTW
 - [ ] Display initialises and shows UI
 - [ ] Backlight at correct brightness (75% default)
 - [ ] Touch responds to taps
-- [ ] Touch coordinates correct orientation (portrait 320×480)
+- [ ] Touch coordinates correct orientation (portrait 320├ù480)
 - [ ] Settings survive reboot (NVS working)
 - [ ] I2C bus: QMI8658 IMU responds at address 0x6A or 0x6B
 - [ ] Auto-rotate: WHO_AM_I reads 0x05 (serial log "QMI8658 initialised")
@@ -79,5 +79,15 @@ Mark each entry with status: **[PLANNED]**, **[IN PROGRESS]**, **[DONE — SOFTW
 - [ ] I2C bus: PCF85063 RTC responds at 0x51
 - [ ] I2C bus: AXP2101 PMIC responds at 0x34
 - [ ] SD card mounts at `/sdcard`
+- [ ] Recon log: SD card is formatted **FAT32** (FatFs supports FAT32/exFAT only;
+      ext2/3/4 are NOT supported). ≤32 GB → FAT32; 64 GB+ → exFAT (enable exFAT
+      sdkconfig knobs).
+- [ ] Recon log: SDMMC GPIOs verified against schematic (currently the 3.5B
+      defaults CLK 11 / CMD 10 / D0 9 in recon_log.cpp — may differ on this board)
+- [ ] Recon log: `/sdcard/recon_log.csv` is created with the header row on first boot
+- [ ] Recon log: running a Wi-Fi scan appends rows (type=wifi, SSID/MAC/channel/rssi)
+- [ ] Recon log: running a BLE scan appends rows (type=ble, name/MAC/rssi/addr_type)
+- [ ] Recon log: log survives power-off and keeps appending (running trail)
+- [ ] Recon log: with NO card inserted, recon still works (feature no-ops, one warning)
 - [ ] MCP23017 responds at I2C address (default 0x20)
 - [ ] INA228 responds at I2C address (default 0x40)

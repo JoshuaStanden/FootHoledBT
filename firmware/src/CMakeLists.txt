@@ -10,6 +10,7 @@ idf_component_register(
         "mcp23017.cpp"
         "ina228.cpp"
         "qmi8658.cpp"
+        "recon_log.cpp"
     INCLUDE_DIRS "."
     REQUIRES
         esp_driver_ledc
@@ -23,6 +24,8 @@ idf_component_register(
         esp_netif
         bt
         nvs_flash
+        fatfs
+        esp_driver_sdmmc
         lvgl
         espressif__esp_lcd_st7796
 )

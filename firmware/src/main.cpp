@@ -3,12 +3,13 @@
  * @brief Firmware entry point and LVGL scheduling loop.
  *
  * Startup order:
- *   1. footholed_settings_init() — load NVS settings (or apply defaults)
- *   2. lv_init()                 — LVGL must be ready before board adapter
- *   3. footholed_board_init()    — register ST7796 display + FT6336 touch with LVGL
+ *   1. footholed_settings_init() ΓÇö load NVS settings (or apply defaults)
+ *   1b. footholed_recon_log_init() ΓÇö mount SD card + open the recon CSV log
+ *   2. lv_init()                 ΓÇö LVGL must be ready before board adapter
+ *   3. footholed_board_init()    ΓÇö register ST7796 display + FT6336 touch with LVGL
  *   4. Apply persisted brightness to the backlight
- *   5. footholed_ui_init()       — build the LVGL screen tree
- *   6. footholed_orient_init()   — bring up IMU display auto-rotation (optional)
+ *   5. footholed_ui_init()       ΓÇö build the LVGL screen tree
+ *   6. footholed_orient_init()   ΓÇö bring up IMU display auto-rotation (optional)
  *   7. LVGL tick/handler loop (also polls orientation ~4 Hz)
  *
  * IMPORTANT: footholed_board_init() returns false until the Waveshare 3.5B
@@ -19,6 +20,7 @@
 #include "ui.h"
 #include "wifi_scan.h"
 #include "ble_scan.h"
+#include "recon_log.h"
 #include "esp_log.h"
 #include "driver/ledc.h"
 #include "freertos/FreeRTOS.h"
@@ -35,10 +37,10 @@ static const char *TAG = "FootHoled/main";
  * are loaded we correct it to the user's stored value.  Only called when the
  * display is confirmed ready so the LEDC channel is guaranteed initialised.
  *
- * @param brightness  Brightness percentage 0–100.
+ * @param brightness  Brightness percentage 0ΓÇô100.
  */
 static void apply_brightness(uint8_t brightness) {
-    // 10-bit duty: 0–1023.  Match constants from board_adapter.cpp.
+    // 10-bit duty: 0ΓÇô1023.  Match constants from board_adapter.cpp.
     const uint32_t max_duty = (1u << 10) - 1;  // 1023
     uint32_t duty = ((uint32_t)brightness * max_duty) / 100u;
     ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0, duty);
@@ -51,7 +53,13 @@ extern "C" void app_main(void) {
     //    Must happen before UI init so the UI reads correct initial values.
     const bool settings_ok = footholed_settings_init();
     if (!settings_ok) {
-        ESP_LOGW(TAG, "Settings service degraded — using defaults");
+        ESP_LOGW(TAG, "Settings service degraded ΓÇö using defaults");
+    }
+
+    // Mount the SD card and open the persistent recon log before the scanners
+    // start producing sightings. Degrades gracefully (feature off) if no card.
+    if (!footholed_recon_log_init()) {
+        ESP_LOGW(TAG, "Recon SD log unavailable ΓÇö sightings will not be persisted");
     }
 
     // Wi-Fi scanning runs on a separate task; no scanning during boot.
@@ -85,7 +93,7 @@ extern "C" void app_main(void) {
             ESP_LOGI(TAG, "Auto-rotation disabled in settings");
         }
     } else {
-        ESP_LOGW(TAG, "UI unavailable — display/touch adapter not yet verified on hardware.");
+        ESP_LOGW(TAG, "UI unavailable ΓÇö display/touch adapter not yet verified on hardware.");
     }
 
     // 7. LVGL tick and timer handler loop.
