@@ -148,6 +148,13 @@ static void flush_cb(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map)
         out_px = (uint8_t *)s_rotate_buf;
     }
 
+    // Convert LVGL RGB565 byte order for the ST7796 SPI transfer.
+    const uint32_t pixel_count =
+        (out_area.x2 - out_area.x1 + 1) *
+        (out_area.y2 - out_area.y1 + 1);
+
+    lv_draw_sw_rgb565_swap(out_px, pixel_count);
+
     esp_err_t err = esp_lcd_panel_draw_bitmap(
         s_panel_handle,
         out_area.x1, out_area.y1,
@@ -301,6 +308,8 @@ bool footholed_board_init(void)
     }
     ESP_ERROR_CHECK(esp_lcd_panel_reset(s_panel_handle));
     ESP_ERROR_CHECK(esp_lcd_panel_init(s_panel_handle));
+    // Set the verified horizontal mirror once, not on every DMA flush.
+    ESP_ERROR_CHECK(esp_lcd_panel_mirror(s_panel_handle, true, false));
     ESP_ERROR_CHECK(esp_lcd_panel_invert_color(s_panel_handle, true));  // [verified] vendor inverts
     // One-time panel mirror (X mirrored, Y not) — matches the orientation the
     // old code was (wrongly) re-applying on every flush. Set once here.
@@ -486,4 +495,22 @@ void footholed_orient_poll(void)
                 "Auto-rotate: IMU=%d, LVGL=%d",
                 (int)o, (int)rotation);
     }
+}
+
+
+// ===========================================================================
+// Accessors for other services (e.g. diagnostics) that need the shared bus or
+// the display-ready state owned by this translation unit. Read-only — they do
+// not create or tear down anything.
+// ===========================================================================
+i2c_master_bus_handle_t footholed_board_i2c_bus(void)
+{
+    return s_i2c_bus;
+}
+
+bool footholed_board_display_ready(void)
+{
+    // s_lvgl_disp is set only after the display + input devices are registered
+    // with LVGL in footholed_board_init(), so it is the authoritative flag.
+    return s_lvgl_disp != nullptr;
 }
