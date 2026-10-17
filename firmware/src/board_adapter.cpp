@@ -81,8 +81,11 @@ static const char *TAG = "FootHoled/board";
 #define FH_LCD_CMD_BITS       8
 #define FH_LCD_PARAM_BITS     8
 
-// LVGL draw-buffer size: 1/10 frame, SPIRAM-backed.
-#define FH_BUF_LINES          (FH_LCD_V_RES / 10)
+// LVGL draw-buffer size: ~1/12 frame (40 lines). Deliberately small because
+// these buffers live in INTERNAL DMA-capable RAM (see footholed_board_init):
+// at 320*40*2 bytes each (~25 KB) the two draw buffers plus the rotate buffer
+// total ~75 KB, which fits internal SRAM without starving the rest of the app.
+#define FH_BUF_LINES          40
 #define FH_BUF_SIZE           (FH_LCD_H_RES * FH_BUF_LINES)
 
 // ---------------------------------------------------------------------------
@@ -155,8 +158,10 @@ static void flush_cb(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map)
                  esp_err_to_name(err));
         lv_display_flush_ready(disp);
     }
-    ESP_ERROR_CHECK(esp_lcd_panel_mirror(s_panel_handle, true, false));
-    // On success colour_trans_done_cb() releases the buffer.
+    // NOTE: panel mirror is configured ONCE in footholed_board_init(), not here.
+    // Calling esp_lcd_panel_mirror() on every flush is wasteful, and wrapping it
+    // in ESP_ERROR_CHECK on the flush path would reboot the chip on any transient
+    // failure. On success, colour_trans_done_cb() releases the buffer.
 }
 
 static bool colour_trans_done_cb(esp_lcd_panel_io_handle_t io,
@@ -297,6 +302,9 @@ bool footholed_board_init(void)
     ESP_ERROR_CHECK(esp_lcd_panel_reset(s_panel_handle));
     ESP_ERROR_CHECK(esp_lcd_panel_init(s_panel_handle));
     ESP_ERROR_CHECK(esp_lcd_panel_invert_color(s_panel_handle, true));  // [verified] vendor inverts
+    // One-time panel mirror (X mirrored, Y not) — matches the orientation the
+    // old code was (wrongly) re-applying on every flush. Set once here.
+    ESP_ERROR_CHECK(esp_lcd_panel_mirror(s_panel_handle, true, false));
     // Display stays off until LVGL is wired; turned on after disp registration.
     ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(s_panel_handle, false));
 
@@ -343,11 +351,22 @@ bool footholed_board_init(void)
         return false;
     }
 
-    s_lvgl_buf1 = (lv_color_t *)heap_caps_malloc(FH_BUF_SIZE * sizeof(lv_color_t), MALLOC_CAP_SPIRAM);
-    s_lvgl_buf2 = (lv_color_t *)heap_caps_malloc(FH_BUF_SIZE * sizeof(lv_color_t), MALLOC_CAP_SPIRAM);
-    s_rotate_buf = (lv_color_t *)heap_caps_malloc(FH_BUF_SIZE * sizeof(lv_color_t), MALLOC_CAP_SPIRAM);
+    // LVGL draw buffers live in INTERNAL, DMA-CAPABLE RAM — NOT PSRAM.
+    //
+    // On the ESP32-S3 the SPI/GDMA engine that drives esp_lcd_panel_draw_bitmap()
+    // cannot DMA directly out of PSRAM on this path: handing it a PSRAM pointer
+    // makes spi_master try to allocate an internal bounce buffer per transfer,
+    // which exhausts DMA memory and fails with ESP_ERR_NO_MEM
+    // ("spicommon_dma_setup_priv_buffer: Failed to allocate priv TX buffer").
+    // Allocating the buffers in internal DMA RAM removes the bounce path
+    // entirely. At 1/12 frame RGB565 each buffer is 320*40*2 ≈ 25 KB; three of
+    // them ≈ 75 KB, which fits comfortably in internal SRAM on the S3R8.
+    const uint32_t buf_caps = MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL;
+    s_lvgl_buf1  = (lv_color_t *)heap_caps_malloc(FH_BUF_SIZE * sizeof(lv_color_t), buf_caps);
+    s_lvgl_buf2  = (lv_color_t *)heap_caps_malloc(FH_BUF_SIZE * sizeof(lv_color_t), buf_caps);
+    s_rotate_buf = (lv_color_t *)heap_caps_malloc(FH_BUF_SIZE * sizeof(lv_color_t), buf_caps);
     if (!s_lvgl_buf1 || !s_lvgl_buf2 || !s_rotate_buf) {
-        ESP_LOGE(TAG, "LVGL draw buffer allocation failed (SPIRAM)");
+        ESP_LOGE(TAG, "LVGL draw buffer allocation failed (internal DMA RAM)");
         if (s_lvgl_buf1) { heap_caps_free(s_lvgl_buf1); s_lvgl_buf1 = nullptr; }
         if (s_lvgl_buf2) { heap_caps_free(s_lvgl_buf2); s_lvgl_buf2 = nullptr; }
         if (s_rotate_buf){ heap_caps_free(s_rotate_buf);s_rotate_buf = nullptr; }

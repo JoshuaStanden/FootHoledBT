@@ -7,8 +7,8 @@
  *   2. lv_init()                 — LVGL must be ready before board adapter
  *   3. footholed_board_init()    — register ST7796 display + FT6336 touch with LVGL
  *   4. Apply persisted brightness to the backlight
- *   5. footholed_ui_init()       — build the LVGL screen tree
- *   6. footholed_orient_init()   — bring up IMU display auto-rotation (optional)
+ *   5. footholed_splash_show()   — boot splash; on fade-out it calls build_app_ui()
+ *   6. build_app_ui()            — footholed_ui_init() + IMU auto-rotation
  *   7. LVGL tick/handler loop (also polls orientation ~4 Hz)
  *
  * IMPORTANT: footholed_board_init() returns false until the Waveshare 3.5B
@@ -17,6 +17,7 @@
 #include "board_adapter.h"
 #include "settings.h"
 #include "ui.h"
+#include "splash.h"
 #include "esp_log.h"
 #include "driver/ledc.h"
 #include "freertos/FreeRTOS.h"
@@ -44,6 +45,28 @@ static void apply_brightness(uint8_t brightness) {
     ESP_LOGI(TAG, "Backlight set to %u%% (duty %lu)", brightness, duty);
 }
 
+/**
+ * @brief Build the application UI and bring up auto-rotation.
+ *
+ * Invoked once by the boot splash after it finishes fading out (see
+ * footholed_splash_show). Runs on the LVGL/main thread. Kept separate from
+ * app_main so the splash controls exactly when the real UI appears.
+ */
+static void build_app_ui(void) {
+    // Build the LVGL screen tree on the (now splash-free) active screen.
+    footholed_ui_init();
+
+    // Bring up IMU-driven display auto-rotation (non-fatal if absent).
+    // Gated on the persisted setting so the user can turn it off.
+    if (footholed_settings_get_auto_rotate()) {
+        if (!footholed_orient_init()) {
+            ESP_LOGW(TAG, "Auto-rotation unavailable (IMU not detected)");
+        }
+    } else {
+        ESP_LOGI(TAG, "Auto-rotation disabled in settings");
+    }
+}
+
 extern "C" void app_main(void) {
     // 1. Load settings from NVS (or apply compile-time defaults on first boot).
     //    Must happen before UI init so the UI reads correct initial values.
@@ -62,18 +85,10 @@ extern "C" void app_main(void) {
         // 4. Correct backlight to the user's stored brightness (board init set 50 %).
         apply_brightness(footholed_settings_get_brightness());
 
-        // 5. Build the LVGL screen tree.
-        footholed_ui_init();
-
-        // 6. Bring up IMU-driven display auto-rotation (non-fatal if absent).
-        //    Gated on the persisted setting so the user can turn it off.
-        if (footholed_settings_get_auto_rotate()) {
-            if (!footholed_orient_init()) {
-                ESP_LOGW(TAG, "Auto-rotation unavailable (IMU not detected)");
-            }
-        } else {
-            ESP_LOGI(TAG, "Auto-rotation disabled in settings");
-        }
+        // 5. Show the boot splash now, and build the real UI only after it
+        //    finishes (build_app_ui runs from the splash's completion callback).
+        //    The splash is non-blocking; the LVGL loop below drives its timing.
+        footholed_splash_show(1800 /* hold ms */, build_app_ui);
     } else {
         ESP_LOGW(TAG, "UI unavailable — display/touch adapter not yet verified on hardware.");
     }

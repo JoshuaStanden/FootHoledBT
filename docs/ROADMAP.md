@@ -5,6 +5,7 @@
 - [x] Preserve original README ASCII header and PNG logo
 - [x] Clickable offline browser prototype with Recon / Analyze / Expand, Settings, privacy preview, and simulated module setup
 - [x] LVGL 9 UI source foundation
+- [x] Boot splash screen (`splash.cpp`) — FOOTHOLED wordmark + tagline + boot bar, fades into the menu (written, not yet flash-verified)
 - [x] ST7796 SPI display + FT6336 capacitive touch BSP integration (`board_adapter.cpp`) — non-B board, via TCA9554 reset expander; **GPIOs unverified, awaiting compile + flash test on physical board**
 - [x] PlatformIO board target corrected (`esp32-s3-devkitc-1-n16r8v`), SPIRAM/flash flags set
 - [x] `partitions.csv` for 16 MB flash (NVS + factory 6 MB + OTA 6 MB + SPIFFS + NVS keys)

@@ -87,7 +87,7 @@ dark. This is exactly the substitution AGENTS.md rule #3 warned against.
   PMIC/codec are the same parts on both boards.
 
 **Still TODO(HW) before this can be claimed to work:** fill in verified GPIOs +
-TCA9554 bits, compile with ESP-IDF v5.4+, flash, and confirm display + touch on
+TCA9554 bits, compile with ESP-IDF 6.1.x, flash, and confirm display + touch on
 the physical non-B board.
 
 ---
@@ -147,3 +147,51 @@ touch misbehaves on hardware.
 
 Still NOT compiled/flashed/tested — but the configuration now matches the vendor's
 working factory firmware, so a first flash has a real chance of lighting up.
+---
+
+## 2026-10-14 — Boot splash screen (`splash.cpp`)
+
+- **Added a boot splash shown at power-on**, before the menu. It renders the
+  `FOOTHOLED` wordmark (white `FOOT` + cyan `HOLED`), the
+  `RECON · ANALYZE · EXPAND` tagline in brand colours, a geometric hexagon
+  shield motif, and a cosmetic boot progress bar, then fades out after ~1.8 s
+  and hands off to `footholed_ui_init()`.
+- **Built from text + geometry, NOT a redrawn logo.** AGENTS.md rule #11 and
+  `docs/BRANDING.md` state the approved `assets/footholed-logo.png` is the only
+  approved logo asset and no other variants may be generated. The splash
+  therefore uses only the FootHoled *name/tagline* styled with brand colours and
+  a simple hexagon outline — it does not hand-draw the shield/boot-print
+  artwork. If the actual shield graphic is wanted on the splash later, convert
+  the approved PNG to an LVGL RGB565 image and draw it with `lv_image`; do not
+  author a second logo variant.
+- **Boot bar is cosmetic.** Its animation is time-based (0→100 across the hold),
+  not tied to real initialisation progress — consistent with the convention
+  that the UI must not imply state it does not have.
+- **lv_conf.h additions:** enabled `LV_FONT_MONTSERRAT_28` (wordmark) and
+  `LV_USE_LINE` (shield outline). Kept otherwise minimal.
+- **Status:** written, not yet compiled/flashed/verified on hardware
+  (AGENTS.md rule #12). The splash uses only standard LVGL 9.2 widgets already
+  in use elsewhere plus `lv_line`, so no new managed component is required.
+
+---
+
+## 2026-10-17 — Pinned toolchain: ESP-IDF 6.1.x + LVGL 9.x
+
+Going forward this project targets **ESP-IDF 6.1.x** and **LVGL 9.x**. Made the
+requirement explicit so a fresh checkout or a different machine cannot silently
+build on a mismatched toolchain:
+
+- **`firmware/src/idf_component.yml`:** added an explicit `idf: ">=6.1"` floor.
+  The component manager now refuses to resolve on an older IDF. LVGL stays pinned
+  to the 9.2 line (`lvgl/lvgl: "~9.2.2"`) — compatible 9.x patch/minor updates are
+  allowed, a jump to LVGL 10 is not (it would break the API this firmware uses).
+- **`firmware/platformio.ini`:** added a header note naming the ESP-IDF 6.1 /
+  LVGL 9 target and pointing at the manifest as the authoritative pin.
+- **Docs updated** (`Build_Log.md`, `DEVELOPMENT.md`, and the TODO line above):
+  the stale "ESP-IDF v5.4+/v5.5+" references were replaced with 6.1.x.
+
+Context: `firmware/dependencies.lock` already records the last known-good build
+resolving against `idf 6.1.0` and `lvgl 9.2.2`, so this pin codifies the
+configuration that actually built and ran on the physical board — it is not a
+forward-looking guess. LVGL was already on 9; this change mainly makes the IDF
+floor real and corrects the docs.

@@ -1,4 +1,10 @@
 dependencies:
+  # Toolchain floor: this project targets ESP-IDF 6.1.x. The component manager
+  # refuses to resolve on an older IDF, so a fresh checkout cannot silently
+  # build against 5.x. (The known-good build in dependencies.lock ran on 6.1.0.)
+  idf: ">=6.1"
+  # UI framework: LVGL 9.x only. Pinned to the 9.2 line (compatible releases);
+  # do NOT allow a jump to LVGL 10, which changes the API this firmware uses.
   lvgl/lvgl: "~9.2.2"
   # ST7796 SPI display driver required by board_adapter.cpp (non-B 3.5 board).
   # Sourced from the ESP Component Registry (espressif/esp_lcd_st7796).

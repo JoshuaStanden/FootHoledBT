@@ -5,7 +5,35 @@ Mark each entry with status: **[PLANNED]**, **[IN PROGRESS]**, **[DONE — SOFTW
 
 ---
 
-## 2026-10-11 — Board bringup session  `[DONE — SOFTWARE ONLY]`
+## 2026-10-17 — Fixed runtime display crash loop (DMA buffer)  `[IN PROGRESS]`
+
+Firmware built and flashed on ESP-IDF 6.1 (toolchain `IDF_v6.1`). On boot the
+serial log filled with a repeating error loop and nothing drew:
+
+```
+spi_common: spicommon_dma_setup_priv_buffer(460): Failed to allocate priv TX buffer
+lcd_panel.io.spi: panel_io_spi_tx_color(406): spi transmit (queue) color failed
+st7796_general: panel_st7796_draw_bitmap(295): send command failed
+FootHoled/board: draw_bitmap failed: ESP_ERR_NO_MEM — releasing buffer to avoid stall
+```
+
+**Root cause:** the LVGL draw buffers were allocated in PSRAM
+(`MALLOC_CAP_SPIRAM`). The ESP32-S3 SPI/GDMA engine cannot DMA directly out of
+PSRAM on the `esp_lcd_panel_draw_bitmap()` path, so spi_master tried to allocate
+an internal bounce buffer per flush and ran out of DMA RAM — failing every frame.
+
+**Fix (`firmware/src/board_adapter.cpp`):**
+- Draw buffers moved to internal DMA RAM (`MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL`).
+- Buffer height reduced to 40 lines (~1/12 frame) so the three buffers total
+  ~75 KB of internal SRAM.
+- Removed the `esp_lcd_panel_mirror()` call that ran on **every flush** (a perf
+  bug, and an `ESP_ERROR_CHECK` on the flush path that would reboot the chip on a
+  transient failure); it is now set **once** in `footholed_board_init()`.
+
+TODO(HW): reflash and confirm the error loop is gone and the UI renders.
+
+---
+
 
 **What was done (no physical hardware used):**
 
@@ -29,13 +57,13 @@ Mark each entry with status: **[PLANNED]**, **[IN PROGRESS]**, **[DONE — SOFTW
 
 **Branch:** `feat/waveshare-3.5b-board-bringup` (2 commits: `599fb95`, `21a456d`)
 
-**Build status:** NOT COMPILED. PlatformIO + ESP-IDF v5.5+ toolchain not installed in this environment. Do not treat firmware as functional until the steps below are completed.
+**Build status:** NOT COMPILED. PlatformIO + ESP-IDF 6.1.x toolchain not installed in this environment. Do not treat firmware as functional until the steps below are completed.
 
 ---
 
 ## Next required hardware steps  `[PLANNED]`
 
-1. **Install toolchain:** ESP-IDF v5.5.0+ (required per Waveshare docs) + PlatformIO.
+1. **Install toolchain:** ESP-IDF 6.1.x (the pinned target — see `firmware/src/idf_component.yml`) + PlatformIO.
    - Windows: use the ESP-IDF Installation Manager (offline installer) from [dl.espressif.com/dl/eim/](https://dl.espressif.com/dl/eim/)
    - Then: `cd firmware && pio run` to verify the build compiles clean.
 
