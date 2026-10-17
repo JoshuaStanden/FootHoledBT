@@ -34,6 +34,8 @@ FootHoled H1 is an experimental, modular ESP32-S3 handheld for authorized wirele
 - 3D-printable enclosure — custom designs, published once hardware/software is tested
 - (Dropped from the original plan: SAO expansion)
 
+## Planned Features
+
 ### Longer-term goals
 - Smart battery validation
 - Modular expansion ecosystem (12-pin add-on module connector)
@@ -62,3 +64,18 @@ The upstream repository has used MIT; retain the existing repository `LICENSE`. 
 **Post-DEFCON Update:** Ok, I've had a chance to look everything over and take a step back. The original idea was great for a "3 weeks until Defcon, can I complete it" but it lacked thinking some of it through. Why reinvent the wheel? In light of my most recent research, I'm taking this project in a slightly different direction. I am changing it to be a modular device, meaning any piece can be replaced or upgraded later. I am completely changing the hardware list. Moving up to a 3.5" screen and an ESP32-S3 with added GPIO options. It will have a 12-pin connector for add-on modules later. It will have GPS with stubby antenna, 2 wifi cards, a magnetometer, accelerometer, IR receiver and transmitter, sub-1 GHz, NFC and more. First I'm starting with the basics and the UI for it. As that progresses I will add more and more functionality until it's ready for download. No idea what the case design for this revision will look like, but having 16MB to work in will make my life easier. Having a slightly larger, capacitive touch screen doesn't hurt either. With the project change I will publish anew but will keep this in a historical branch for personal inspiration's sake. Updated current features list to reflect known changes. UI will likely be LVGL based. Buckle up, Buttercup.
 
 **Latest:** This project is on hold as I try to tackle another project before DC35 — FAFO (Freq Around, Find Out). Details coming soon, waiting on slow boat from China so development on that can resume near the end of October. The plan is to have 100 units for sale at DC35.
+
+---
+
+## Support
+
+Every donation goes toward:
+
+- Hardware prototypes
+- PCB manufacturing
+- DEFCON development
+- Testing equipment
+- Documentation
+- New open-source features
+
+☕ Buy me a coffee: [buymeacoffee.com/FootHoled](https://buymeacoffee.com/FootHoled)
